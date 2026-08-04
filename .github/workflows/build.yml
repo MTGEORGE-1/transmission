@@ -1,0 +1,78 @@
+# Nightly rebuild and deploy.
+#
+# The engine runs here, not in the browser. This job fetches data, fits the
+# regime model, and publishes the resulting static page to GitHub Pages. The
+# site itself never makes a live call, so a Chinese endpoint having a bad day
+# can never break the page a visitor is looking at — it just means the numbers
+# are one day stale.
+name: Build and deploy
+
+on:
+  # 22:00 UTC on weekdays — after the US close, so the ADR leg has settled.
+  # That is 06:00 next-day China time, well after the mainland and HK closes.
+  schedule:
+    - cron: "0 22 * * 1-5"
+  # Lets you trigger a build by hand from the Actions tab.
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The interesting one. This runner is not behind the WatchGuard firewall
+      # that geo-blocks China-hosted IPs on the local network, so the A-share
+      # sources may work here even though they fail on the laptop. Allowed to
+      # fail — it is a probe, not a dependency. Read the uploaded JSON to find
+      # out, then widen the universe in transmission/universe.py if it passes.
+      - name: Probe data sources (is the A-share leg reachable from CI?)
+        continue-on-error: true
+        timeout-minutes: 10
+        run: python phase0_data_audit.py
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-source-audit
+          path: phase0_audit_results.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Build engine
+        run: python run.py --force
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
