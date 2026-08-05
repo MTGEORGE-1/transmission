@@ -1,105 +1,82 @@
-# Transmission — China Tech Model Engine
+# China vs US — Where Are the Markets Heading
 
-> **Chinese tech equities are priced by policy, not by earnings. This engine quantifies that.**
-
-Prototype covering **Phases 0–3 plus a stripped Phase 6** of [SCOPING.md](SCOPING.md) — the
-"minimum viable showcase". Runs end to end against live data in about 7 seconds.
+A sector-by-sector comparison of the Chinese and US markets over the last ten years:
+**automotive & EV, AI & internet, fintech, semiconductors, and phones & consumer tech.**
+Roughly ten leading companies on each side of each sector — 90 companies in total.
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python run.py          # --force to bypass cache
+.venv/bin/python run.py          # --force to re-fetch (~80s, one API call per company)
 open site/index.html
 ```
 
-The dashboard reads `site/data.js`, so it opens straight from the filesystem — no server, and
-no live calls from the page.
+Live site: **https://mtgeorge-1.github.io/transmission/** — rebuilt automatically each weekday.
 
 ---
 
-## What it does today
+## What it found
 
-| Layer | Status |
-|---|---|
-| **L1 Ingest** — yfinance (HK + ADR), akshare (CSI 300, M2, PMI) | ✅ live, cached, lineage-stamped |
-| **L2 Features** — breadth, realized vol, momentum, credit-impulse proxy, PMI gap | ✅ causal, publication-lagged |
-| **L3 Model B** — 4-state Gaussian HMM | ✅ own Baum-Welch implementation |
-| **L3 Model A** — policy stance index (NLP) | ⬜ not built |
-| **L3 Model C** — supply-chain graph | ⬜ not built |
-| **L4 Presentation** — static dashboard | ✅ regime bands, signatures, transitions, lineage |
+Ten-year annualised return, equal-weight basket per side:
 
-39 names across EV & auto, semis & AI, and fintech & consumer; CSI 300 benchmark; 580 weekly
-observations from April 2015.
+| Sector | China | United States | |
+|---|---|---|---|
+| Automotive & EV | 15.6% | 15.9% | level |
+| AI & Internet Platforms | 16.5% | **36.3%** | US |
+| Fintech & Financial Platforms | **24.8%** | 22.2% | China |
+| Semiconductors | 23.8% | **45.1%** | US |
+| Phones & Consumer Tech | 22.6% | **37.0%** | US |
 
-## Does the regime model actually work?
+The US baskets out-grew the Chinese ones in three of five sectors, and the gap is widest
+exactly where it gets talked about most — semiconductors and AI. China's one clear win is
+fintech. Automotive is a genuine dead heat, notable given the US side is anchored by Tesla.
 
-The states are fit blind — nothing tells the model what 2015 or 2018 were. Checked against
-events afterwards:
+**The size gap dwarfs the growth gap.** Across all five sectors the US companies here are
+worth roughly **21×** their Chinese counterparts by market value.
 
-| Period | Model says |
-|---|---|
-| June 2015 (bubble peak → crash) | **Retail Euphoria → Policy Stress** |
-| October 2018 (trade war) | **Policy Stress** |
-| October 2024 (stimulus rally) | **Retail Euphoria** |
-| August 2021 (tech crackdown) | Grinding Consolidation |
+## How to read it
 
-The 2015 Euphoria→Stress handoff is the result worth showing: the model separates a melt-up from
-a melt-down using only breadth, vol, momentum and credit, with no labels.
+- **Growth** means total return on split- and dividend-adjusted prices — what an investor
+  would have earned, not how big the business got.
+- **Indices are equal-weight**, built from mean daily returns rather than mean prices. Half
+  the Chinese basket listed after 2020 (Li Auto and XPeng in 2021, Horizon Robotics in 2024),
+  and averaging price levels would put a false step in the index every time a name joined.
+  Each company's listing date is shown where its history is short of ten years.
+- **Everything is in USD.** yfinance reports market cap in listing currency and financials in
+  `financialCurrency`, and the two disagree constantly — BYD reports CNY, SMIC reports USD
+  despite listing in Hong Kong. Comparing those unconverted produces a 7× error in China's
+  favour. Conversion is at current spot and the rates used are printed in the footer.
 
-Fitted signatures are coherent — Euphoria carries the highest breadth (0.82) and strong returns;
-Policy Stress the highest volatility (0.34) with the worst returns; Stimulus Risk-On the *lowest*
-volatility (0.12) with broad participation.
+## Known limits
 
-**This is not yet validation.** There is no hit-rate, no confusion matrix, no out-of-sample test.
-That is Phase 7, and per the scoping doc it is what separates this from a student project.
+- **Revenue CAGR covers ~3 years, not ten.** Free data provides only four annual periods.
+  The window length is shown next to every figure rather than glossed.
+- **Chinese names are HK listings and US ADRs.** Mainland A-shares are geo-blocked from this
+  network, which costs Cambricon, Hygon, NAURA, AMEC and iFlytek — several of China's
+  strongest chip and AI names. See [PHASE0_FINDINGS.md](PHASE0_FINDINGS.md). This understates
+  China's semiconductor design capability, and the page says so.
+- **Ant Group is private**, so China's largest fintech is absent from the fintech sector.
+- Supply-chain names (Sunny Optical, BYD Electronic, AAC) legitimately sit in two sectors and
+  appear twice.
+- Nothing here is a forecast.
 
 ## Layout
 
 ```
-transmission/
-  config.py     paths, publication lags, block-page markers
-  universe.py   39 curated names + benchmarks
-  ingest.py     fetch, cache, retry, lineage, block-page guard
-  features.py   causal features; weekly matrix
-  hmm.py        Gaussian HMM — scaled Baum-Welch, Viterbi
-  regime.py     fit + deterministic state labelling
-  export.py     JSON artifacts + site/data.js
+versus/
+  sectors.py    the 90-company universe, five sectors, two countries
+  ingest.py     prices + fundamentals, USD-normalised, cached
+  metrics.py    sector indices, CAGRs, per-company rows, aggregates
+  export.py     JSON artifact + site/data.js
 run.py          orchestrator
-site/           dashboard (opens from file://)
-data/           cache/ and artifacts/
+site/index.html the page
 ```
 
-## Things worth knowing
+Deployment: [DEPLOY.md](DEPLOY.md). Every push to `main` rebuilds and redeploys.
 
-**The A-share leg is geo-blocked on this network.** A WatchGuard firewall returns
-"Connection denied by Geolocation" for China-hosted IPs, which takes out every EastMoney
-endpoint, ChinaBond, MIIT, NBS and baostock. Full diagnosis in
-[PHASE0_FINDINGS.md](PHASE0_FINDINGS.md). Consequences: no A-H premium, no Cambricon, and the
-universe is HK/ADR only. `universe.py` carries `a_share` codes so that leg switches on the
-moment it is reachable — a VPN, or the GitHub Actions runner the scoping doc already calls for.
+## Also in here
 
-**A firewall block page is still HTTP 200.** `ingest._guard_blockpage` fails loudly rather than
-parsing one as data. Do not "fix" a blocked source with `verify=False`; it will silently succeed
-and return garbage.
-
-**No lookahead.** Monthly macro is shifted to its release date before being broadcast to daily
-(45d for M2, 3d for PMI). Weekly bins are labelled with the last date actually observed, not the
-bin's Friday — otherwise the current reading gets stamped with a future date.
-
-**The HMM is hand-written**, not `hmmlearn`: no compiled dependency on Python 3.14, and the
-E-step is inspectable for the methodology write-up.
-
-**Probabilities saturate near 1.0.** Six features push the posterior onto one state. Read it as
-confidence, not calibration — they have not been calibration-tested.
-
-## Next
-
-1. **Phase 7 validation** — hit rates, confusion matrix, out-of-sample split. Highest credibility
-   per hour, and the scoping doc says do not cut it.
-2. **Phase 4 — policy stance index.** The strongest differentiator. PBOC, NDRC and State Council
-   are all reachable; MIIT is not.
-3. **GitHub Actions nightly.** Sidesteps the firewall entirely and restores the A-share leg.
-4. **Phase 5 — supply-chain graph.**
-
-`archive_prior_session/` holds an earlier parallel draft (policy corpus, graph scaffolding,
-synthetic data generator), kept for reference — it was never executed.
+`run_regime.py` and `transmission/` are an earlier build — a 4-state hidden Markov regime
+classifier for Chinese equities, still working (`python run_regime.py`). It found the June
+2015 bubble-to-crash handoff without being told the dates. Kept because the validation result
+is worth something; not what the site shows. Original plan in [SCOPING.md](SCOPING.md).
